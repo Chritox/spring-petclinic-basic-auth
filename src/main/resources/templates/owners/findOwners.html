@@ -7,6 +7,7 @@
   <h2 th:text="#{findOwners}">Find Owners</h2>
 
   <form th:object="${owner}" th:action="@{/owners}" method="get" class="form-horizontal" id="search-owner-form">
+    <input type="hidden" th:name="${_csrf.parameterName}"/>
     <div class="form-group">
       <div class="control-group" id="lastNameGroup">
         <label class="col-sm-2 control-label" th:text="#{lastName}">Last name </label>

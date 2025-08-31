@@ -24,8 +24,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
-import org.springframework.samples.petclinic.owner.PetTypeRepository;
-import org.springframework.samples.petclinic.owner.OwnerRepository;
+import org.springframework.context.annotation.Import;
+import org.springframework.samples.petclinic.security.SecurityConfiguration;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.aot.DisabledInAotMode;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.BDDMockito.given;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
@@ -49,6 +51,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(value = PetController.class,
 		includeFilters = @ComponentScan.Filter(value = PetTypeFormatter.class, type = FilterType.ASSIGNABLE_TYPE))
+@Import(SecurityConfiguration.class)
 @DisabledInNativeImage
 @DisabledInAotMode
 class PetControllerTests {
@@ -86,6 +89,7 @@ class PetControllerTests {
 	}
 
 	@Test
+	@WithMockUser(username = "vet", roles = { "VET" })
 	void testInitCreationForm() throws Exception {
 		mockMvc.perform(get("/owners/{ownerId}/pets/new", TEST_OWNER_ID))
 			.andExpect(status().isOk())
@@ -94,9 +98,11 @@ class PetControllerTests {
 	}
 
 	@Test
+	@WithMockUser(username = "vet", roles = { "VET" })
 	void testProcessCreationFormSuccess() throws Exception {
 		mockMvc
-			.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).param("name", "Betty")
+			.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).with(csrf())
+				.param("name", "Betty")
 				.param("type", "hamster")
 				.param("birthDate", "2015-02-12"))
 			.andExpect(status().is3xxRedirection())
@@ -107,9 +113,11 @@ class PetControllerTests {
 	class ProcessCreationFormHasErrors {
 
 		@Test
+		@WithMockUser(username = "vet", roles = { "VET" })
 		void testProcessCreationFormWithBlankName() throws Exception {
 			mockMvc
-				.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).param("name", "\t \n")
+				.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).with(csrf())
+					.param("name", "\t \n")
 					.param("birthDate", "2015-02-12"))
 				.andExpect(model().attributeHasNoErrors("owner"))
 				.andExpect(model().attributeHasErrors("pet"))
@@ -120,9 +128,11 @@ class PetControllerTests {
 		}
 
 		@Test
+		@WithMockUser(username = "vet", roles = { "VET" })
 		void testProcessCreationFormWithDuplicateName() throws Exception {
 			mockMvc
-				.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).param("name", "petty")
+				.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).with(csrf())
+					.param("name", "petty")
 					.param("birthDate", "2015-02-12"))
 				.andExpect(model().attributeHasNoErrors("owner"))
 				.andExpect(model().attributeHasErrors("pet"))
@@ -133,9 +143,11 @@ class PetControllerTests {
 		}
 
 		@Test
+		@WithMockUser(username = "vet", roles = { "VET" })
 		void testProcessCreationFormWithMissingPetType() throws Exception {
 			mockMvc
-				.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).param("name", "Betty")
+				.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).with(csrf())
+					.param("name", "Betty")
 					.param("birthDate", "2015-02-12"))
 				.andExpect(model().attributeHasNoErrors("owner"))
 				.andExpect(model().attributeHasErrors("pet"))
@@ -146,12 +158,14 @@ class PetControllerTests {
 		}
 
 		@Test
+		@WithMockUser(username = "vet", roles = { "VET" })
 		void testProcessCreationFormWithInvalidBirthDate() throws Exception {
 			LocalDate currentDate = LocalDate.now();
 			String futureBirthDate = currentDate.plusMonths(1).toString();
 
 			mockMvc
-				.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).param("name", "Betty")
+				.perform(post("/owners/{ownerId}/pets/new", TEST_OWNER_ID).with(csrf())
+					.param("name", "Betty")
 					.param("birthDate", futureBirthDate))
 				.andExpect(model().attributeHasNoErrors("owner"))
 				.andExpect(model().attributeHasErrors("pet"))
@@ -162,6 +176,7 @@ class PetControllerTests {
 		}
 
 		@Test
+		@WithMockUser(username = "vet", roles = { "VET" })
 		void testInitUpdateForm() throws Exception {
 			mockMvc.perform(get("/owners/{ownerId}/pets/{petId}/edit", TEST_OWNER_ID, TEST_PET_ID))
 				.andExpect(status().isOk())
@@ -172,9 +187,11 @@ class PetControllerTests {
 	}
 
 	@Test
+	@WithMockUser(username = "vet", roles = { "VET" })
 	void testProcessUpdateFormSuccess() throws Exception {
 		mockMvc
-			.perform(post("/owners/{ownerId}/pets/{petId}/edit", TEST_OWNER_ID, TEST_PET_ID).param("name", "Betty")
+			.perform(post("/owners/{ownerId}/pets/{petId}/edit", TEST_OWNER_ID, TEST_PET_ID).with(csrf())
+				.param("name", "Betty")
 				.param("type", "hamster")
 				.param("birthDate", "2015-02-12"))
 			.andExpect(status().is3xxRedirection())
@@ -185,9 +202,11 @@ class PetControllerTests {
 	class ProcessUpdateFormHasErrors {
 
 		@Test
+		@WithMockUser(username = "vet", roles = { "VET" })
 		void testProcessUpdateFormWithInvalidBirthDate() throws Exception {
 			mockMvc
-				.perform(post("/owners/{ownerId}/pets/{petId}/edit", TEST_OWNER_ID, TEST_PET_ID).param("name", " ")
+				.perform(post("/owners/{ownerId}/pets/{petId}/edit", TEST_OWNER_ID, TEST_PET_ID).with(csrf())
+					.param("name", " ")
 					.param("birthDate", "2015/02/12"))
 				.andExpect(model().attributeHasNoErrors("owner"))
 				.andExpect(model().attributeHasErrors("pet"))
@@ -197,9 +216,11 @@ class PetControllerTests {
 		}
 
 		@Test
+		@WithMockUser(username = "vet", roles = { "VET" })
 		void testProcessUpdateFormWithBlankName() throws Exception {
 			mockMvc
-				.perform(post("/owners/{ownerId}/pets/{petId}/edit", TEST_OWNER_ID, TEST_PET_ID).param("name", "  ")
+				.perform(post("/owners/{ownerId}/pets/{petId}/edit", TEST_OWNER_ID, TEST_PET_ID).with(csrf())
+					.param("name", "  ")
 					.param("birthDate", "2015-02-12"))
 				.andExpect(model().attributeHasNoErrors("owner"))
 				.andExpect(model().attributeHasErrors("pet"))
