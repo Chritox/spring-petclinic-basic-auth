@@ -1,6 +1,7 @@
 package org.springframework.samples.petclinic.security;
 
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -17,7 +18,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.filter.CommonsRequestLoggingFilter;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.csrf.InvalidCsrfTokenException;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 
 @Configuration
 @EnableWebSecurity
@@ -31,12 +34,30 @@ public class SecurityConfiguration {
 	@Bean
 	public AuthenticationProvider customAuthenticationProvider(LoginAttemptService loginAttemptService,
 			UserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
-
 		return new CustomAuthenticationProvider(loginAttemptService, userDetailsService, passwordEncoder);
 	}
 
+	// Enable session lifecycle events for comprehensive security logging
 	@Bean
-	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+	public HttpSessionEventPublisher httpSessionEventPublisher() {
+		return new HttpSessionEventPublisher();
+	}
+
+	// Custom AccessDeniedHandler to log CSRF failures and publish custom events
+	@Bean
+	public AccessDeniedHandler customAccessDeniedHandler(ApplicationEventPublisher publisher) {
+		return (request, response, ex) -> {
+			if (ex instanceof InvalidCsrfTokenException) {
+				// Publish custom CSRF event for security logging
+				publisher.publishEvent(new CsrfFailureEvent(request, ex));
+			}
+			response.sendError(HttpServletResponse.SC_FORBIDDEN, "Access Denied");
+		};
+	}
+
+	@Bean
+	public SecurityFilterChain securityFilterChain(HttpSecurity http, AccessDeniedHandler customAccessDeniedHandler)
+			throws Exception {
 		http
 			// APP.3.1.A1: Authentisierung – Clients müssen sich für geschützte Ressourcen
 			// authentifizieren
@@ -48,13 +69,17 @@ public class SecurityConfiguration {
 				.permitAll()
 				.requestMatchers("/", "/vets*", "/vets/**")
 				.permitAll()
+				.requestMatchers("/csp-report")
+				.permitAll() // Allow CSP violation reports
 				.requestMatchers("/pets/**", "/owners/**")
 				.hasRole("VET")
 				.anyRequest()
 				.authenticated())
+
 			// APP.3.1.A1: Angemessene Authentisierungsmethode – Formular-Login statt
 			// Basic Auth
 			.formLogin((form) -> form.loginPage("/login").permitAll())
+
 			// APP.3.1.A1: Grenzwerte für fehlgeschlagene Anmeldeversuche (durch Framework
 			// gehandhabt)
 			.logout(LogoutConfigurer::permitAll)
@@ -64,6 +89,9 @@ public class SecurityConfiguration {
 			// APP.3.1.A7: Schutz vor automatisierter Nutzung – CSRF verhindert
 			// automatisierte Angriffe
 			.csrf(Customizer.withDefaults())
+
+			// Exception handling for comprehensive security event logging
+			.exceptionHandling(eh -> eh.accessDeniedHandler(customAccessDeniedHandler))
 
 			// APP.3.1.A12: Sichere Konfiguration – Session-Management
 			.sessionManagement((session) -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
@@ -76,8 +104,8 @@ public class SecurityConfiguration {
 				.httpStrictTransportSecurity((hsts) -> hsts.maxAgeInSeconds(31536000) // 1
 																						// Jahr
 					.includeSubDomains(true))
-				// APP.3.1.A21: Content-Security-Policy gegen XSS
-				.contentSecurityPolicy((csp) -> csp.policyDirectives("default-src 'self'"))
+				// APP.3.1.A21: Content-Security-Policy gegen XSS with violation reporting
+				.contentSecurityPolicy((csp) -> csp.policyDirectives("default-src 'self'; report-uri /csp-report"))
 				// APP.3.1.A21: X-Content-Type-Options Header
 				.contentTypeOptions(Customizer.withDefaults())
 				// APP.3.1.A21: XSS-Protection
